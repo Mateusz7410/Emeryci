@@ -46,7 +46,7 @@ int M;
 int K;
 int clubNumber;
 int rank;
-long lamportClock;
+long lamportClock; //dopisać inkrementowanie zegara
 
 typedef struct data_s {
         int lamportClock;
