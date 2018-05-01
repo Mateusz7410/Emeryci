@@ -5,6 +5,7 @@
 #include <limits.h>
 #include <mpi.h>
 #include <unistd.h>
+#include <algorithm>
 
 //STATUS
 #define NO_GROUP 0
@@ -53,6 +54,7 @@ typedef struct data_s {
         int message;
         int rank;
         int clubNumber;
+        int money;
 } data;
 
 void isSomeoneToAsk(){
@@ -88,23 +90,28 @@ void *ThreadBehavior()
     while(true){
         //1
         MPI_Recv(&recv, 1, data_s, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORD, MPI_STATUS_IGNORE);
+        lamportClock = max(recv.lamportClock, lamportClock) + 1;
         pthread_mutex_lock(&statusMutex);
 
         //2
         if(status == ENOUGH_MONEY && recv.message == ENTER_CLUB_QUERY){
             if(recv.clubNumber != clubNumber){
+                lamportClock++;
                 send.lamportClock = lamportClock;
                 send.message = ENTER_PERMISSION;
                 send.rank = rank;
                 send.clubNumber = clubNumber;
+                send.money = money;
                 MPI_Send(&send, 1, data_s, recv.rank, MPI_ANY_TAG, MPI_COMM_WORLD);
             }
             else{
                 if(recv.lamportClock < lamportClock){
+                    lamportClock++;
                     send.lamportClock = lamportClock;
                     send.message = ENTER_PERMISSION;
                     send.rank = rank;
                     send.clubNumber = clubNumber;
+                    send.money = money;
                     MPI_Send(&send, 1, data_s, recv.rank, MPI_ANY_TAG, MPI_COMM_WORLD);
                 }
             }
@@ -112,17 +119,19 @@ void *ThreadBehavior()
 
         //3
         if(status != NO_GROUP && recv.message == GROUP_INVITE){
+            lamportClock++;
             send.lamportClock = lamportClock;
             send.message = REJECT_INVITE_MSG;
             send.rank = rank;
             send.clubNumber = clubNumber;
+            send.money = money;
             MPI_Send(&send, 1, data_s, recv.rank, MPI_ANY_TAG, MPI_COMM_WORLD);
         }
 
         //4
         if(status == FOUNDER && recv.message == GROUP_CONFIRMATION){
             pthread_mutex_lock(&groupMoneyMutex);
-            groupMoney += recv.lamportClock;
+            groupMoney += recv.money;
             pthread_mutex_unlock(&groupMoneyMutex);
             *(tab+recv.rank) = MY_GROUP;
             status = ACCEPT_INVITE;
@@ -144,10 +153,12 @@ void *ThreadBehavior()
 
         //7
         if(status != ENOUGH_MONEY && status != ENTER_CLUB && recv.message == ENTER_CLUB_QUERY){
+            lamportClock++;
             send.lamportClock = lamportClock;
             send.message = ENTER_PERMISSION;
             send.rank = rank;
             send.clubNumber = clubNumber;
+            send.money = money;
             MPI_Send(&send, 1, data_s, recv.rank, MPI_ANY_TAG, MPI_COMM_WORLD);
         }
 
@@ -155,17 +166,21 @@ void *ThreadBehavior()
         if(status == NO_GROUP && recv.message == GROUP_INVITE){
             if(recv.lamportClock < lamportClock){
                 status = PARTICIPATOR;
+                lamportClock++;
                 send.lamportClock = lamportClock;
                 send.message = GROUP_CONFIRMATION;
                 send.rank = rank;
                 send.clubNumber = clubNumber;
+                send.money = money;
                 MPI_Send(&send, 1, data_s, recv.rank, MPI_ANY_TAG, MPI_COMM_WORLD);
             }
             else{
+                lamportClock++;
                 send.lamportClock = lamportClock;
                 send.message = REJECT_INVITE_MSG;
                 send.rank = rank;
                 send.clubNumber = clubNumber;
+                send.money = money;
                 MPI_Send(&send, 1, data_s, recv.rank, MPI_ANY_TAG, MPI_COMM_WORLD);
             }
         }
@@ -175,7 +190,7 @@ void *ThreadBehavior()
             status = FOUNDER;
             *(tab+recv.rank) = MY_GROUP;
             pthread_mutex_lock(&groupMoneyMutex);
-            groupMoney += recv.lamportClock;
+            groupMoney += recv.money;
             pthread_mutex_unlock(&groupMoneyMutex);
         }
 
@@ -187,10 +202,12 @@ void *ThreadBehavior()
 
         //11
         if(status == PARTICIPATOR && recv.message == GROUP_CONFIRMATION){
+            lamportClock++;
             send.lamportClock = lamportClock;
             send.message = GROUP_BREAK_MSG;
             send.rank = rank;
             send.clubNumber = clubNumber;
+            send.money = money;
             MPI_Send(&send, 1, data_s, recv.rank, MPI_ANY_TAG, MPI_COMM_WORLD);
         }
 
@@ -207,10 +224,12 @@ void *ThreadBehavior()
         //14
         if(status == ENTER_CLUB && recv.message == ENTER_CLUB_QUERY){
             if(recv.clubNumber != clubNumber){
+                lamportClock++;
                 send.lamportClock = lamportClock;
                 send.message = ENTER_PERMISSION;
                 send.rank = rank;
                 send.clubNumber = clubNumber;
+                send.money = money;
                 MPI_Send(&send, 1, data_s, recv.rank, MPI_ANY_TAG, MPI_COMM_WORLD);
             }
         }
@@ -271,10 +290,12 @@ int main (int argc, char *argv[])
         createThread();
         data send;
         while(isSomeoneToAsk()){
+            lamportClock++;
             send.lamportClock = lamportClock;
             send.message = GROUP_INVITE;
             send.rank = rank;
             send.clubNumber = clubNumber;
+            send.money = money;
             MPI_Send(&send, 1, data_s, getRandomFreeElder(), MPI_ANY_TAG, MPI_COMM_WORLD);
             while(status == NO_GROUP || status == PARTICIPATOR){
                 //waiting for status update
@@ -305,10 +326,12 @@ int main (int argc, char *argv[])
         if(groupMoney < M && status == FOUNDER){
             for(int i=0;i<N;i++){
                 if(*(tab+i) == MY_GROUP && i != rank){
+                    lamportClock++;
                     send.lamportClock = lamportClock;
                     send.message = GROUP_BREAK_MSG;
                     send.rank = rank;
                     send.clubNumber = clubNumber;
+                    send.money = money;
                     MPI_Send(&send, 1, data_s, i, MPI_ANY_TAG, MPI_COMM_WORLD); //Wyślij do wszystkich którzy są w mojej grupie (oprócz mnie)
                 }
             }
@@ -322,10 +345,12 @@ int main (int argc, char *argv[])
             pthread_mutex_unlock(&statusMutex);
             clubNumber = rand() % K;
             for(int i=0;i<N;i++){
+                lamportClock++;
                 send.lamportClock = lamportClock;
                 send.message = ENTER_CLUB_QUERY;
                 send.rank = rank;
                 send.clubNumber = clubNumber;
+                send.money = money;
                 MPI_Send(&send, 1, data_s, i, MPI_ANY_TAG, MPI_COMM_WORLD); //Wyślij do wszystkich zapytanie o wejście do klubu
             }
             while(status != ENTER_CLUB){
@@ -336,18 +361,22 @@ int main (int argc, char *argv[])
                 sleep(3);
                 for(int i=0;i<N;i++){
                     if(*(tab+i) == MY_GROUP && i != rank){
+                        lamportClock++;
                         send.lamportClock = lamportClock;
                         send.message = EXIT_CLUB_MSG;
                         send.rank = rank;
                         send.clubNumber = clubNumber;
+                        send.money = money;
                         MPI_Send(&send, 1, data_s, i, MPI_ANY_TAG, MPI_COMM_WORLD); //Wyślij do wszystkich którzy są w mojej grupie info o wyjściu z klubu
                     }
                 }
                 for(int i=0;i<N;i++){
+                    lamportClock++;
                     send.lamportClock = lamportClock;
                     send.message = ENTER_PERMISSION;
                     send.rank = rank;
                     send.clubNumber = clubNumber;
+                    send.money = money;
                     MPI_Send(&send, 1, data_s, i, MPI_ANY_TAG, MPI_COMM_WORLD); //Wyślij do wszystkich info o możliwości wejścia do klubu w którym byliśmy
                 }
             }
