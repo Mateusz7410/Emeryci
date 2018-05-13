@@ -102,9 +102,9 @@ void *ThreadBehavior()
     while(true){
         //1
         MPI_Recv(&recv, 1, mpi_data, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-	printf("[%d][lamport: %d]Otrzymalem wiadomosc od %d, nr wiad: %d, nr klubu: %d, money: %d\n",rank, lamportClock,recv.rank, recv.message, recv.clubNumber, recv.money);
+	//printf("[%d][lamport: %d]Otrzymalem wiadomosc od %d, nr wiad: %d, nr klubu: %d, money: %d, moj status: %d\n",rank, lamportClock,recv.rank, recv.message, recv.clubNumber, recv.money, status);
         lamportClock = max(recv.lamportClock, lamportClock) + 1;
-        pthread_mutex_lock(&statusMutex);
+       // pthread_mutex_lock(&statusMutex);
 
         //2
         if(status == ENOUGH_MONEY && recv.message == ENTER_CLUB_QUERY){
@@ -116,7 +116,7 @@ void *ThreadBehavior()
                 send.clubNumber = clubNumber;
                 send.money = money;
                 MPI_Send(&send, 1, mpi_data, recv.rank, TAG, MPI_COMM_WORLD);
-		printf("[%d][lamport: %d]Wysylam wiadomosc do %d, wiad: ENTER_PERMISSION, nr klubu: %d, money: %d\n",rank, lamportClock,recv.rank, send.clubNumber, send.money);
+		printf("[%d][lamport: %d]Pozwolenie na wejscie do klubu o nr: %d dla RANK: %d\n",rank, lamportClock, recv.clubNumber, recv.rank);
             }
             else{
                 if(recv.lamportClock < lamportClock){
@@ -127,7 +127,7 @@ void *ThreadBehavior()
                     send.clubNumber = clubNumber;
                     send.money = money;
                     MPI_Send(&send, 1, mpi_data, recv.rank, TAG, MPI_COMM_WORLD);
-printf("[%d][lamport: %d]Wysylam wiadomosc do %d, wiad: ENTER_PERMISSION, nr klubu: %d, money: %d\n",rank, lamportClock,recv.rank, send.clubNumber, send.money);
+		    printf("[%d][lamport: %d]Pozwolenie na wejscie do klubu o nr: %d dla RANK: %d\n",rank, lamportClock, recv.clubNumber, recv.rank);
                 }
             }
         }
@@ -141,7 +141,7 @@ printf("[%d][lamport: %d]Wysylam wiadomosc do %d, wiad: ENTER_PERMISSION, nr klu
             send.clubNumber = clubNumber;
             send.money = money;
             MPI_Send(&send, 1, mpi_data, recv.rank, TAG, MPI_COMM_WORLD);
-printf("[%d][lamport: %d]Wysylam wiadomosc do %d, wiad: REJECT_INVITE_MSG, nr klubu: %d, money: %d\n",rank, lamportClock,recv.rank,  send.clubNumber, send.money);
+	    printf("[%d][lamport: %d]Odrzucenie proponowanej grupy od RANK: %d\n",rank, lamportClock,recv.rank);
         }
 
         //4
@@ -151,18 +151,21 @@ printf("[%d][lamport: %d]Wysylam wiadomosc do %d, wiad: REJECT_INVITE_MSG, nr kl
             pthread_mutex_unlock(&groupMoneyMutex);
             *(tab+recv.rank) = MY_GROUP;
             status = ACCEPT_INVITE;
-	printf("[%d][lamport: %d] Jestem FOUNDER, mamy na razie: %d a potrzeba %d pieniedzy.", rank, lamportClock, groupMoney, M);
+	    printf("[%d][lamport: %d]RANK: %d dalacza do grupy!\n",rank, lamportClock, recv.rank);
+	    printf("[%d][lamport: %d]Jestem kapitanem, mamy na razie: %d a potrzeba %d pieniedzy.\n", rank, lamportClock, groupMoney, M);
         }
 
         //5
         if(status == FOUNDER && recv.message == REJECT_INVITE_MSG){
             *(tab+recv.rank) = NOT_MY_GROUP;
             status = REJECT_INVITE;
+	    printf("[%d][lamport: %d]Odrzucenie proponowanej grupy od RANK: %d(jestem Kapitanem)\n",rank, lamportClock, recv.rank);
         }
 
         //6
-        if(status == FOUNDER && recv.message == ENTER_PERMISSION){
+        if(status == ENOUGH_MONEY && recv.message == ENTER_PERMISSION){
             approveCount++;
+	    printf("[%d][lamport: %d]Pozwolenie dla mnie na wejscie do klubu o nr: %d od RANK: %d\n",rank, lamportClock, clubNumber, recv.rank);
             if(approveCount == N-1){
                 status = ENTER_CLUB;
             }
@@ -177,7 +180,7 @@ printf("[%d][lamport: %d]Wysylam wiadomosc do %d, wiad: REJECT_INVITE_MSG, nr kl
             send.clubNumber = clubNumber;
             send.money = money;
             MPI_Send(&send, 1, mpi_data, recv.rank, TAG, MPI_COMM_WORLD);
-printf("[%d][lamport: %d]Wysylam wiadomosc do %d, wiad: ENTER_PERMISSION, nr klubu: %d, money: %d\n",rank, lamportClock,recv.rank,  send.clubNumber, send.money);
+	    printf("[%d][lamport: %d]Pozwolenie na wejscie do klubu o nr: %d dla RANK: %d\n",rank, lamportClock,recv.clubNumber, recv.rank);
         }
 
         //8
@@ -191,7 +194,7 @@ printf("[%d][lamport: %d]Wysylam wiadomosc do %d, wiad: ENTER_PERMISSION, nr klu
                 send.clubNumber = clubNumber;
                 send.money = money;
                 MPI_Send(&send, 1, mpi_data, recv.rank, TAG, MPI_COMM_WORLD);
-printf("[%d][lamport: %d]Wysylam wiadomosc do %d, wiad: GROUP_CONFIRMATION, nr klubu: %d, money: %d\n",rank, lamportClock,recv.rank, send.clubNumber, send.money);
+		printf("[%d][lamport: %d]Akceptuje zaproszenie do grupy od RANK: %d\n",rank, lamportClock,recv.rank);
             }
             else{
                 lamportClock++;
@@ -201,23 +204,26 @@ printf("[%d][lamport: %d]Wysylam wiadomosc do %d, wiad: GROUP_CONFIRMATION, nr k
                 send.clubNumber = clubNumber;
                 send.money = money;
                 MPI_Send(&send, 1, mpi_data, recv.rank, TAG, MPI_COMM_WORLD);
-printf("[%d][lamport: %d]Wysylam wiadomosc do %d, wiad: REJECT_INVITE_MSG, nr klubu: %d, money: %d\n",rank, lamportClock,recv.rank,  send.clubNumber, send.money);
+		printf("[%d][lamport: %d]Odrzucam zaproszenie do grupy od RANK: %d\n",rank, lamportClock,recv.rank);
             }
         }
 
         //9
         if(status == NO_GROUP && recv.message == GROUP_CONFIRMATION){
-            status = FOUNDER;
+            status = ACCEPT_INVITE;
             *(tab+recv.rank) = MY_GROUP;
             pthread_mutex_lock(&groupMoneyMutex);
             groupMoney += recv.money;
             pthread_mutex_unlock(&groupMoneyMutex);
+	    printf("[%d][lamport: %d]RANK: %d dalacza do grupy!\n",rank, lamportClock, recv.rank);
+	    printf("[%d][lamport: %d]Jestem kapitanem, mamy na razie: %d a potrzeba %d pieniedzy.\n", rank, lamportClock, groupMoney, M);
         }
 
         //10
         if(status == NO_GROUP && recv.message == REJECT_INVITE_MSG){
             status = GROUP_BREAK;
             *(tab+recv.rank) = NOT_MY_GROUP;
+	    printf("[%d][lamport: %d]Moje zaproszenie zostalo odrzucone od RANK: %d\n",rank, lamportClock, recv.rank);
         }
 
         //11
@@ -229,17 +235,19 @@ printf("[%d][lamport: %d]Wysylam wiadomosc do %d, wiad: REJECT_INVITE_MSG, nr kl
             send.clubNumber = clubNumber;
             send.money = money;
             MPI_Send(&send, 1, mpi_data, recv.rank, TAG, MPI_COMM_WORLD);
-printf("[%d][lamport: %d]Wysylam wiadomosc do %d, wiad: GROUP_BREAK_MSG, nr klubu: %d, money: %d\n",rank, lamportClock,recv.rank, send.clubNumber, send.money);
+	    printf("[%d][lamport: %d]Zrywam grupe z RANK: %d (moje zaproszenie jest juz nie aktualne)\n",rank, lamportClock,recv.rank);
         }
 
         //12
         if(status == PARTICIPATOR && recv.message == GROUP_BREAK_MSG){
             status = GROUP_BREAK;
+	    printf("[%d][lamport: %d]Grupa zostala rozwiazana przez RANK: %d!\n",rank, lamportClock, recv.rank);
         }
 
         //13
-        if(status == PARTICIPATOR && recv.message == EXIT_CLUB_MSG){
-            status = EXIT_CLUB;
+        if(recv.message == EXIT_CLUB_MSG){
+              printf("[%d][lamport: %d]        Wychodze z klubu jako czlonek grupy! Było super!", rank, lamportClock);
+	      status = EXIT_CLUB;
         }
 
         //14
@@ -252,11 +260,12 @@ printf("[%d][lamport: %d]Wysylam wiadomosc do %d, wiad: GROUP_BREAK_MSG, nr klub
                 send.clubNumber = clubNumber;
                 send.money = money;
                 MPI_Send(&send, 1, mpi_data, recv.rank, TAG, MPI_COMM_WORLD);
-printf("[%d][lamport: %d]Wysylam wiadomosc do %d, wiad: ENTER_PERMISSION, nr klubu: %d, money: %d\n",rank, lamportClock,recv.rank,  send.clubNumber, send.money);
+		printf("[%d][lamport: %d]Pozwolenie na wejscie do klubu o nr: %d  dla RANK: %d\n",rank, lamportClock,recv.rank,  recv.clubNumber);
             }
         }
-
-        pthread_mutex_unlock(&statusMutex);
+	
+       // pthread_mutex_unlock(&statusMutex);
+	//sleep(1);
     }
 
     pthread_exit(NULL);
@@ -303,16 +312,17 @@ int main (int argc, char *argv[])
 
     MPI_Type_create_struct(nitems, blocklengths, offsets, types, &mpi_data);
 	MPI_Type_commit(&mpi_data);
-    srand( rank );
-
+    srand( time(0) + rank );
+	createThread();
+	lamportClock = rand() % 4;
     while(true){
         bool restart = false;
         //Zmienne wspoldzielone
-	int r = rand() % 3;
+	int r = rand() % 4;
         sleep(r);
-        lamportClock = 0;
+        //lamportClock = r;
         money = rand() % (M - 2) + 1;
-        groupMoney = 0;
+        groupMoney = money;
         approveCount = 0;
         status = NO_GROUP;
         clubNumber = -1;
@@ -324,7 +334,6 @@ int main (int argc, char *argv[])
         }
 
 
-        createThread();
         data send;
         while(isSomeoneToAsk()){
             lamportClock++;
@@ -333,33 +342,37 @@ int main (int argc, char *argv[])
             send.rank = rank;
             send.clubNumber = clubNumber;
             send.money = money;
-	int random = getRandomFreeElder();
+	    int random = getRandomFreeElder();
             MPI_Send(&send, 1, mpi_data, random, TAG, MPI_COMM_WORLD);
-printf("[%d][lamport: %d]Wysylam wiadomosc do %d, wiad: GROUP_INVITE, nr klubu: %d, money: %d\n",rank, lamportClock,random,  send.clubNumber, send.money);
-            while(status == NO_GROUP || status == PARTICIPATOR){
+	    printf("[%d][lamport: %d]        Zapytanie o dolaczenie do grupy dla RANK: %d\n",rank, lamportClock, random);
+            while(status == NO_GROUP || status == PARTICIPATOR || status == FOUNDER){
                 //waiting for status update
             }
             pthread_mutex_lock(&statusMutex);
             if(status == ACCEPT_INVITE){
                 status = FOUNDER;
-                if(groupMoney >= M)
-                    break;
+                if(groupMoney >= M){
+			printf("[%d][lamport: %d]        Mamy wystarczajaca ilosc pieniedzy(mamy: %d, wymagane: %d)! Przechodze do wyboru klubu. \n", rank, lamportClock, groupMoney, M);
+		  	break;
+		}
+
             }
             if(status == REJECT_INVITE){
                 status = FOUNDER;
             }
             if(status == GROUP_BREAK){
+		groupMoney = money;
                 status = NO_GROUP;
             }
             if(status == EXIT_CLUB){
+		printf("[%d][lamport: %d]        Wychodze jako czlonek grupy! Ale byla zabawa!\n", rank, lamportClock);
                 restart = true;
                 break;
             }
             pthread_mutex_unlock(&statusMutex);
         }
         //Wychodzimy z klubu (dla emerytów nie będących założycielami)
-        if(restart)
-            break;
+        if(!restart){
 
         //Jeżeli za mało pieniędzy oznacza że zapytał wszystkich i nie da rady więc rozwiązuje grupę
         if(groupMoney < M && status == FOUNDER){
@@ -372,34 +385,38 @@ printf("[%d][lamport: %d]Wysylam wiadomosc do %d, wiad: GROUP_INVITE, nr klubu: 
                     send.clubNumber = clubNumber;
                     send.money = money;
                     MPI_Send(&send, 1, mpi_data, i, TAG, MPI_COMM_WORLD); //Wyślij do wszystkich którzy są w mojej grupie (oprócz mnie)
-printf("[%d][lamport: %d]Wysylam wiadomosc do %d, wiad: GROUP_BREAK_MSG, nr klubu: %d, money: %d\n",rank, lamportClock,i, send.clubNumber, send.money);
+		    printf("[%d][lamport: %d]        Rozwiazanie grupy dla RANK: %d\n",rank, lamportClock,i);
                 }
             }
-            break;
         }
 
         //Jeżeli mamy siano i możemy ubiegać się o wejście
         if(groupMoney >= M && status == FOUNDER){
-            pthread_mutex_lock(&statusMutex);
+	printf("[%d][lamport: %d]        Wybieramy klub!\n", rank, lamportClock);
+            //pthread_mutex_lock(&statusMutex);
             status = ENOUGH_MONEY;
-            pthread_mutex_unlock(&statusMutex);
+            //pthread_mutex_unlock(&statusMutex);
             clubNumber = rand() % K;
             for(int i=0;i<N;i++){
-                lamportClock++;
+              	if(i != rank){
+		lamportClock++;
                 send.lamportClock = lamportClock;
                 send.message = ENTER_CLUB_QUERY;
                 send.rank = rank;
                 send.clubNumber = clubNumber;
                 send.money = money;
                 MPI_Send(&send, 1, mpi_data, i, TAG, MPI_COMM_WORLD); //Wyślij do wszystkich zapytanie o wejście do klubu
-printf("[%d][lamport: %d]Wysylam wiadomosc do %d, wiad: ENTER_CLUB_QUERY, nr klubu: %d, money: %d\n",rank, lamportClock,i, send.clubNumber, send.money);
-            }
+		printf("[%d][lamport: %d]        Zapytanie o wejscie do klubu o nr: %d dla RANK: %d\n",rank, lamportClock,clubNumber, i);
+            	}
+	    }
+	    printf("[%d][lamport: %d]        Czekamy na pozwolenia na wejscie do klubu\n", rank, lamportClock);
             while(status != ENTER_CLUB){
                 //waiting for perrmisions to go to club
             }
 
+	    printf("[%d][lamport: %d]        Mamy pozwolenie na wejscie do klubu! Dobrej zabaway! status: %d\n", rank, lamportClock, status);
             if(status == ENTER_CLUB){
-                sleep(3);
+                //sleep(2);
                 for(int i=0;i<N;i++){
                     if(*(tab+i) == MY_GROUP && i != rank){
                         lamportClock++;
@@ -409,10 +426,11 @@ printf("[%d][lamport: %d]Wysylam wiadomosc do %d, wiad: ENTER_CLUB_QUERY, nr klu
                         send.clubNumber = clubNumber;
                         send.money = money;
                         MPI_Send(&send, 1, mpi_data, i, TAG, MPI_COMM_WORLD); //Wyślij do wszystkich którzy są w mojej grupie info o wyjściu z klubu
-printf("[%d][lamport: %d]Wysylam wiadomosc do %d, wiad: EXIT_CLUB_MSG, nr klubu: %d, money: %d\n",rank, lamportClock,i, send.clubNumber, send.money);
+			printf("[%d][lamport: %d]        Informacja --> Koniec imprezy dla RANK: %d\n",rank, lamportClock,i);
                     }
                 }
                 for(int i=0;i<N;i++){
+		if(i != rank && *(tab+i) != MY_GROUP) {
                     lamportClock++;
                     send.lamportClock = lamportClock;
                     send.message = ENTER_PERMISSION;
@@ -420,11 +438,14 @@ printf("[%d][lamport: %d]Wysylam wiadomosc do %d, wiad: EXIT_CLUB_MSG, nr klubu:
                     send.clubNumber = clubNumber;
                     send.money = money;
                     MPI_Send(&send, 1, mpi_data, i, TAG, MPI_COMM_WORLD); //Wyślij do wszystkich info o możliwości wejścia do klubu w którym byliśmy
-printf("[%d][lamport: %d]Wysylam wiadomosc do %d, wiadomosc: ENTER_PERMISSION, nr klubu: %d, money: %d\n",rank, lamportClock,i, send.clubNumber, send.money);
-                }
+		    printf("[%d][lamport: %d]        Pozwolenie na wejscie do naszego klubu dla RANK: %d\n",rank, lamportClock,i);
+		}
+		}
             }
 
+	printf("[%d][lamport: %d]        Kapitan wychodzi z klubu!\n", rank, lamportClock);
         }
+	}
     }
 
 	MPI_Type_free(&mpi_data);
